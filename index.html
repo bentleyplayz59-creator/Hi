@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#10131b">
+<title>BentleyPlayz Image Gallery</title>
+<style>
+:root{color-scheme:dark;--bg:#10131b;--panel:#191e2a;--line:#2b3445;--text:#eef2fa;--muted:#aab4c5;--accent:#9b8cff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#20283b,var(--bg) 48%);color:var(--text);font:16px/1.5 system-ui,sans-serif;min-height:100vh}
+header{padding:36px 5vw 24px;max-width:1500px;margin:auto}h1{margin:0;font-size:clamp(2rem,5vw,3.5rem);letter-spacing:-.04em}.sub{color:var(--muted);margin:8px 0 22px}
+.controls{display:flex;gap:10px;flex-wrap:wrap}.controls input{flex:1;min-width:210px;background:var(--panel);border:1px solid var(--line);border-radius:12px;color:var(--text);padding:12px 15px;font:inherit}.controls button{background:var(--accent);color:#111322;border:0;border-radius:12px;padding:12px 18px;font-weight:700;cursor:pointer}
+main{max-width:1500px;margin:auto;padding:0 5vw 50px}.status{color:var(--muted);font-size:.92rem;margin:14px 0}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr));gap:16px}.tile{background:var(--panel);border:1px solid var(--line);border-radius:15px;overflow:hidden;cursor:pointer;transition:transform .18s,border-color .18s}.tile:hover{transform:translateY(-3px);border-color:var(--accent)}.tile img{display:block;width:100%;height:210px;object-fit:cover;background:#0b0e14}.name{padding:10px 12px;color:var(--muted);font-size:.85rem;overflow-wrap:anywhere}.empty{padding:35px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:15px}
+.modal{position:fixed;inset:0;background:#05070deF;display:none;align-items:center;justify-content:center;padding:20px;z-index:5}.modal.open{display:flex}.viewer{width:min(1100px,100%);height:min(90vh,900px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}.viewer img{max-width:100%;max-height:calc(90vh - 90px);object-fit:contain}.viewerbar{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;color:var(--muted)}.viewerbar button{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px 13px;cursor:pointer}.viewername{overflow-wrap:anywhere;text-align:center;flex:1}
+@media(max-width:520px){header{padding-top:26px}.tile img{height:180px}}
+</style>
+</head>
+<body>
+<header>
+<h1>BentleyPlayz Image Gallery</h1>
+<p class="sub">Images stored in the <strong>Hi</strong> GitHub repository.</p>
+<div class="controls"><input id="search" type="search" placeholder="Search image filenames…" aria-label="Search image filenames"><button id="refresh" type="button">Refresh gallery</button></div>
+</header>
+<main><p class="status" id="status" aria-live="polite">Loading images…</p><section class="grid" id="gallery"></section></main>
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-label="Image viewer">
+<div class="viewer"><div class="viewerbar"><button id="prev" type="button" aria-label="Previous image">← Previous</button><span class="viewername" id="viewername"></span><button id="next" type="button" aria-label="Next image">Next →</button><button id="close" type="button" aria-label="Close viewer">✕</button></div><img id="large" alt=""></div>
+</div>
+<script>
+const OWNER='bentleyplayz59-creator', REPO='Hi', BRANCH='main';
+const imagePattern=/\.(jpe?g|png|gif|webp|bmp|svg|avif|apng)$/i;
+const gallery=document.getElementById('gallery'),status=document.getElementById('status'),search=document.getElementById('search');
+const modal=document.getElementById('modal'),large=document.getElementById('large'),viewername=document.getElementById('viewername');
+let images=[],shown=[],current=0;
+function rawUrl(path){return 'https://raw.githubusercontent.com/'+OWNER+'/'+REPO+'/'+encodeURIComponent(BRANCH)+'/'+path.split('/').map(encodeURIComponent).join('/')}
+function render(){
+ const term=search.value.trim().toLowerCase();
+ shown=images.filter(x=>x.path.toLowerCase().includes(term));
+ gallery.replaceChildren();
+ status.textContent=shown.length+' image'+(shown.length===1?'':'s')+' found'+(term?' matching “'+search.value+'”':'')+'.';
+ if(!shown.length){const p=document.createElement('div');p.className='empty';p.textContent=images.length?'No images match your search.':'No supported image files were found.';gallery.append(p);return}
+ shown.forEach((item,index)=>{const card=document.createElement('article');card.className='tile';card.tabIndex=0;card.setAttribute('role','button');card.setAttribute('aria-label','Open '+item.path);const img=document.createElement('img');img.loading='lazy';img.src=rawUrl(item.path);img.alt=item.path;const name=document.createElement('div');name.className='name';name.textContent=item.path;card.append(img,name);card.addEventListener('click',()=>openViewer(index));card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openViewer(index)}});gallery.append(card)});
+}
+async function loadImages(){
+ status.textContent='Loading images from GitHub…';gallery.replaceChildren();
+ try{const url='https://api.github.com/repos/'+OWNER+'/'+REPO+'/git/trees/'+encodeURIComponent(BRANCH)+'?recursive=1';const response=await fetch(url,{headers:{Accept:'application/vnd.github+json'}});if(!response.ok)throw new Error('GitHub returned '+response.status+' '+response.statusText);const data=await response.json();images=(data.tree||[]).filter(x=>x.type==='blob'&&imagePattern.test(x.path)).sort((a,b)=>a.path.localeCompare(b.path));render();if(data.truncated)status.textContent+=' GitHub returned a truncated file listing.'}
+ catch(error){status.textContent='Could not load the gallery: '+error.message;gallery.replaceChildren()}
+}
+function openViewer(index){if(!shown.length)return;current=(index+shown.length)%shown.length;const item=shown[current];large.src=rawUrl(item.path);large.alt=item.path;viewername.textContent=(current+1)+' / '+shown.length+' — '+item.path;modal.classList.add('open')}
+function move(delta){openViewer(current+delta)}
+function closeViewer(){modal.classList.remove('open');large.removeAttribute('src')}
+document.getElementById('refresh').addEventListener('click',loadImages);
+document.getElementById('close').addEventListener('click',closeViewer);
+document.getElementById('prev').addEventListener('click',()=>move(-1));
+document.getElementById('next').addEventListener('click',()=>move(1));
+search.addEventListener('input',render);
+modal.addEventListener('click',e=>{if(e.target===modal)closeViewer()});
+document.addEventListener('keydown',e=>{if(!modal.classList.contains('open'))return;if(e.key==='Escape')closeViewer();if(e.key==='ArrowLeft')move(-1);if(e.key==='ArrowRight')move(1)});
+loadImages();
+</script>
+</body>
+</html>
